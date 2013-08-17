@@ -20,9 +20,11 @@ main = do
 process :: [String] -> [String] -> IO ()
 process origins destinations = do
         let escapedUrl = requestString origins destinations
-        response <- simpleHTTP (getRequest escapedUrl)
-        let Right output = parseResponse response
-        print $ sortDistanceMatrix output
+        httpResponse <- simpleHTTP (getRequest escapedUrl)
+        let Right (origins, destinations, matrix) = parseResponse httpResponse
+            (ranks, destMatrix) = rankDistanceMatrix matrix
+            sorted = sort $ applyLabels destMatrix origins destinations ranks 
+        print sorted
         return ()         
 
 urlDistanceMatrix = "http://maps.googleapis.com/maps/api/distancematrix/json?"
@@ -36,27 +38,29 @@ requestString origins destinations = escapedUrl
         originsString = "origins=" ++ intercalate "|" origins
         destinationsString = "destinations=" ++ intercalate "|" destinations
 
-parseResponse :: (Network.Stream.Result (Response String)) -> Either String [(String, [(String, Integer)])] 
-parseResponse (Left _) = Left "Some error"
-parseResponse (Right response) = Right out
-    where
-        out = parseAll . JSON.decode $ rspBody response
+parseResponse :: (Network.Stream.Result (Response String)) -> Either String ([String], [String], [[Integer]]) 
+parseResponse (Right response) = Right (parseAll . JSON.decode $ rspBody response)
+parseResponse _ = Left "HTTP Error"
 
-parseAll :: JSON.Result (JSObject JSValue) -> [(String, [(String, Integer)])] 
-parseAll (Ok resp) = final
+parseAll :: JSON.Result (JSObject JSValue) -> ([String], [String], [[Integer]]) 
+parseAll (Ok resp) = (origins, destinations, matrix)
     where 
-        objMap = fromJSObject resp
-        Just (JSArray destinationList) = lookup "destination_addresses" objMap
-        Just (JSArray originList) = lookup "origin_addresses" objMap
-        destinations = map fromJSString [loc | JSString loc <- destinationList]
-        origins = map fromJSString [loc | JSString loc <- originList]
-        Just (JSArray rows) = lookup "rows" objMap
-        rowObjects = map fromJSObject [row | JSObject row <- rows]        
-        final = zip destinations . transpose $ pairOrigins origins (map parseRow rowObjects)
+        destinations = parseLocations "destination_addresses" resp
+        origins = parseLocations "origin_addresses" resp
+        matrix = parseMatrix resp
 
-pairOrigins :: (Num a) => [String] -> [[a]] -> [[(String, a)]]
-pairOrigins [] [] = []
-pairOrigins (o:os) (m:ms) = [(o, m') | m' <- m]:(pairOrigins os ms)
+parseLocations :: String -> JSObject JSValue -> [String]
+parseLocations locationType obj = map fromJSString [ l | JSString l <- dataList ]
+    where
+        objMap = fromJSObject obj
+        Just (JSArray dataList) = lookup locationType objMap
+
+parseMatrix :: JSObject JSValue -> [[Integer]]
+parseMatrix obj = matrix
+    where
+        Just (JSArray rows) = lookup "rows" (fromJSObject obj)
+        rowObjects = map fromJSObject [row | JSObject row <- rows]        
+        matrix = map parseRow rowObjects
 
 --parseRow :: [(String, JSValue)] -> String
 parseRow [("elements", JSArray elements)] = distanceOnly
@@ -66,6 +70,24 @@ parseRow [("elements", JSArray elements)] = distanceOnly
         realData = map fromJSObject [o | Just (JSObject o) <- distanceObjects] 
         distanceOnly = [numerator x | Just (JSRational _ x) <- map (lookup "value") realData]
 
--- TODO Rank our distance vectors
-sortDistanceMatrix :: (Num a) => [(String, [(String, a)])] -> [(String, [(String, a)])]
-sortDistanceMatrix list = list
+-- Rank our distance vectors
+-- Current strategy uses standard deviation
+rankDistanceMatrix :: (Integral a, Floating b) => [[a]] -> ([b], [[a]])
+rankDistanceMatrix list = (ranks, byDestination)
+    where
+        ranks = map standardDeviation byDestination
+        byDestination = transpose list
+
+standardDeviation :: (Integral a, Floating b) => [a] -> b
+standardDeviation items = stddev
+    where
+        mean = (fromIntegral $ sum items) / (fromIntegral $ length items)
+        diffs = [ abs((fromIntegral x) - mean) | x <- items ]
+        stddev = sqrt ((sum $ map (^ 2) diffs  ) / (fromIntegral $ length items))   
+
+-- Rough
+applyLabels :: Floating a => [[Integer]] -> [String] -> [String] -> [a] -> [(a, String, [(String, Integer)])]
+applyLabels matrix origins destinations ranks = zip3 ranks destinations pairOrigins
+    where
+        pairOrigins = map (zip origins) matrix
+ 
