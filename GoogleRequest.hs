@@ -34,7 +34,7 @@ requestUrl origins destinations = escapedUrl
         destinationsString = "destinations=" ++ intercalate "|" destinations
 
 parseResponse :: String -> ([String], [String], [[Integer]]) 
-parseResponse response = parseJSONResponse . decodeStrict $ response
+parseResponse = parseJSONResponse . decodeStrict 
 
 parseJSONResponse :: JSON.Result (JSObject JSValue) -> ([String], [String], [[Integer]]) 
 parseJSONResponse (Ok resp) = (origins, destinations, matrix)
@@ -46,8 +46,7 @@ parseJSONResponse (Ok resp) = (origins, destinations, matrix)
 parseLocations :: String -> JSObject JSValue -> [String]
 parseLocations locationType obj = map fromJSString [ l | JSString l <- dataList ]
     where
-        objMap = fromJSObject obj
-        Just (JSArray dataList) = lookup locationType objMap
+        Just (JSArray dataList) = lookup locationType (fromJSObject obj)
 
 parseMatrix :: JSObject JSValue -> [[Integer]]
 parseMatrix obj = matrix
