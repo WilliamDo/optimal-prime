@@ -10,18 +10,13 @@ import Network.URI
 import Text.JSON as JSON
 import Text.JSON.Pretty
 
-
-{--
-main = do
-    url <- getLine
-    process ["IG11 9HQ"] ["SE16 3EF"]
---}
-
 process :: [String] -> [String] -> IO ()
 process origins destinations = do
-        let escapedUrl = requestString origins destinations
+        let escapedUrl = requestUrl origins destinations
         httpResponse <- simpleHTTP (getRequest escapedUrl)
-        let Right (origins, destinations, matrix) = parseResponse httpResponse
+        -- TODO Check if response came back okay before parsing
+        responseBody <- getResponseBody httpResponse
+        let (origins, destinations, matrix) = parseResponse responseBody
             (ranks, destMatrix) = rankDistanceMatrix matrix
             sorted = sort $ applyLabels destMatrix origins destinations ranks 
         print sorted
@@ -29,8 +24,8 @@ process origins destinations = do
 
 urlDistanceMatrix = "http://maps.googleapis.com/maps/api/distancematrix/json?"
 
-requestString :: [String] -> [String] -> String
-requestString origins destinations = escapedUrl
+requestUrl :: [String] -> [String] -> String
+requestUrl origins destinations = escapedUrl
     where
         escapedUrl = escapeURIString isUnescapedInURI (urlDistanceMatrix ++ resultString)
         resultString = intercalate "&" [originsString, destinationsString, sensorString]
@@ -38,12 +33,11 @@ requestString origins destinations = escapedUrl
         originsString = "origins=" ++ intercalate "|" origins
         destinationsString = "destinations=" ++ intercalate "|" destinations
 
-parseResponse :: (Network.Stream.Result (Response String)) -> Either String ([String], [String], [[Integer]]) 
-parseResponse (Right response) = Right (parseAll . JSON.decode $ rspBody response)
-parseResponse _ = Left "HTTP Error"
+parseResponse :: String -> ([String], [String], [[Integer]]) 
+parseResponse response = parseJSONResponse . decodeStrict $ response
 
-parseAll :: JSON.Result (JSObject JSValue) -> ([String], [String], [[Integer]]) 
-parseAll (Ok resp) = (origins, destinations, matrix)
+parseJSONResponse :: JSON.Result (JSObject JSValue) -> ([String], [String], [[Integer]]) 
+parseJSONResponse (Ok resp) = (origins, destinations, matrix)
     where 
         destinations = parseLocations "destination_addresses" resp
         origins = parseLocations "origin_addresses" resp
