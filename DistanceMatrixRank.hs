@@ -18,7 +18,7 @@ rankDestinations :: DistanceMatrix -> [(String, Double)]
 rankDestinations m = L.zip (destinations m) (L.map stdDev $ columns (distanceMatrix m))
 
 columns :: Matrix a -> [Vector a]
-columns m = L.map ((flip $ M.getCol) m) [1..cols]
+columns m = L.map (flip M.getCol m) [1..cols]
 	where
 		cols = M.ncols m
 
