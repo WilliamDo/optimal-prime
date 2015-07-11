@@ -6,11 +6,11 @@ import Data.Matrix as M
 
 import Statistics.Sample
 
-data DistanceMatrix = DistanceMatrix 
-									{ 
-										distanceMatrix :: Matrix Double, 
-										origins :: [String], 
-										destinations :: [String] 
+data DistanceMatrix = DistanceMatrix
+									{
+										distanceMatrix :: Matrix Double,
+										origins :: [String],
+										destinations :: [String]
 									}
 									deriving (Show)
 
@@ -24,3 +24,10 @@ columns m = L.map (flip M.getCol m) [1..cols]
 
 testMatrix = DistanceMatrix {distanceMatrix = M.fromLists [[1, 2], [3, 100]], origins = ["A", "B"], destinations = ["C", "D"]}
 
+foo :: IO (Int)
+foo = do
+	number <- fmap toString getLine
+	return (number)
+
+toString :: String -> Int
+toString _ = 123

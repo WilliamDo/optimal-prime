@@ -1,26 +1,72 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module GoogleRequest where
 
+import Data.Aeson
+import Data.Aeson.Types
 import Data.List
-import Data.Ratio
+import Data.Matrix
+import qualified Data.Vector as V
+import qualified Data.HashMap.Strict as S
+import qualified Data.Text as T
+import qualified Data.ByteString.Lazy.Char8 as C
 
 import Network.HTTP
 import Network.Stream
 import Network.URI
 
-import Text.JSON as JSON
-import Text.JSON.Pretty
+import Control.Applicative
+
+import qualified DistanceMatrixRank as DMR
+
+data GoogleMatrix = GoogleMatrix
+  {
+    origins :: [String],
+    destinations :: [String],
+    rows :: [Row]
+  }
+  deriving (Show)
+
+data ElementEntry = ElementEntry
+  {
+    text :: String,
+    value :: Double
+  }
+  deriving (Show)
+
+data Element = Element
+  {
+    distance :: ElementEntry,
+    duration :: ElementEntry
+  }
+  deriving (Show)
+
+data Row = Row [Element]
+  deriving (Show)
+
+instance FromJSON GoogleMatrix where
+  parseJSON (Object v) = GoogleMatrix <$>
+                          v .: "origin_addresses" <*>
+                          v .: "destination_addresses" <*>
+                          v .: "rows"
+
+instance FromJSON ElementEntry where
+  parseJSON (Object v) = ElementEntry <$> v.: "text" <*> v.: "value"
+
+instance FromJSON Element where
+  parseJSON (Object v) = Element <$> v.: "distance" <*> v.: "duration"
+
+instance FromJSON Row where
+  parseJSON (Object v) = Row <$> v.: "elements"
 
 process :: [String] -> [String] -> IO ()
-process origins destinations = do
-        let escapedUrl = requestUrl origins destinations
-        httpResponse <- simpleHTTP (getRequest escapedUrl)
-        -- TODO Check if response came back okay before parsing
-        responseBody <- getResponseBody httpResponse
-        let (origins, destinations, matrix) = parseResponse responseBody
-            (ranks, destMatrix) = rankDistanceMatrix matrix
-            sorted = sort $ applyLabels destMatrix origins destinations ranks 
-        print sorted
-        return ()         
+process from to = do
+        let escapedUrl = requestUrl from to
+        httpResponse <- simpleHTTP (getRequest escapedUrl) >>= getResponseBody
+        let (Just x) = decode (C.pack httpResponse) :: Maybe GoogleMatrix
+        let m = DMR.rankDestinations $ convert x
+        putStrLn (show m)
+        return ()
 
 urlDistanceMatrix = "http://maps.googleapis.com/maps/api/distancematrix/json?"
 
@@ -33,54 +79,13 @@ requestUrl origins destinations = escapedUrl
         originsString = "origins=" ++ intercalate "|" origins
         destinationsString = "destinations=" ++ intercalate "|" destinations
 
-parseResponse :: String -> ([String], [String], [[Integer]]) 
-parseResponse = parseJSONResponse . decodeStrict 
+rowDistances :: Row -> [Double]
+rowDistances (Row elements) = distanceVals
+  where
+    distanceOnly = map distance elements
+    distanceVals = [ value d | d <- distanceOnly]
 
-parseJSONResponse :: JSON.Result (JSObject JSValue) -> ([String], [String], [[Integer]]) 
-parseJSONResponse (Ok resp) = (origins, destinations, matrix)
-    where 
-        destinations = parseLocations "destination_addresses" resp
-        origins = parseLocations "origin_addresses" resp
-        matrix = parseMatrix resp
-
-parseLocations :: String -> JSObject JSValue -> [String]
-parseLocations locationType obj = map fromJSString [ l | JSString l <- dataList ]
-    where
-        Just (JSArray dataList) = lookup locationType (fromJSObject obj)
-
-parseMatrix :: JSObject JSValue -> [[Integer]]
-parseMatrix obj = matrix
-    where
-        Just (JSArray rows) = lookup "rows" (fromJSObject obj)
-        rowObjects = map fromJSObject [row | JSObject row <- rows]        
-        matrix = map parseRow rowObjects
-
---parseRow :: [(String, JSValue)] -> String
-parseRow [("elements", JSArray elements)] = distanceOnly
-    where
-        elems = map fromJSObject [e | JSObject e <- elements]      
-        distanceObjects = map (lookup "distance") elems
-        realData = map fromJSObject [o | Just (JSObject o) <- distanceObjects] 
-        distanceOnly = [numerator x | Just (JSRational _ x) <- map (lookup "value") realData]
-
--- Rank our distance vectors
--- Current strategy uses standard deviation
-rankDistanceMatrix :: (Integral a, Floating b) => [[a]] -> ([b], [[a]])
-rankDistanceMatrix list = (ranks, byDestination)
-    where
-        ranks = map standardDeviation byDestination
-        byDestination = transpose list
-
-standardDeviation :: (Integral a, Floating b) => [a] -> b
-standardDeviation items = stddev
-    where
-        mean = (fromIntegral $ sum items) / (fromIntegral $ length items)
-        diffs = [ abs((fromIntegral x) - mean) | x <- items ]
-        stddev = sqrt ((sum $ map (^ 2) diffs  ) / (fromIntegral $ length items))   
-
--- Rough
-applyLabels :: Floating a => [[Integer]] -> [String] -> [String] -> [a] -> [(a, String, [(String, Integer)])]
-applyLabels matrix origins destinations ranks = zip3 ranks destinations pairOrigins
-    where
-        pairOrigins = map (zip origins) matrix
- 
+convert :: GoogleMatrix -> DMR.DistanceMatrix
+convert (GoogleMatrix os ds rs) = DMR.DistanceMatrix m os ds
+  where
+    m = fromLists $ map rowDistances rs
