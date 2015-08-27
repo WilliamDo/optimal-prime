@@ -51,13 +51,13 @@ instance FromJSON GoogleMatrix where
                           v .: "rows"
 
 instance FromJSON ElementEntry where
-  parseJSON (Object v) = ElementEntry <$> v.: "text" <*> v.: "value"
+  parseJSON (Object v) = ElementEntry <$> v .: "text" <*> v .: "value"
 
 instance FromJSON Element where
-  parseJSON (Object v) = Element <$> v.: "distance" <*> v.: "duration"
+  parseJSON (Object v) = Element <$> v .: "distance" <*> v .: "duration"
 
 instance FromJSON Row where
-  parseJSON (Object v) = Row <$> v.: "elements"
+  parseJSON (Object v) = Row <$> v .: "elements"
 
 process :: [String] -> [String] -> IO ()
 process from to = do
