@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import GoogleRequest
 
 main :: IO ()
-main = someFunc
+main = process ["Covent Garden"] ["Buckingham Palace"]
