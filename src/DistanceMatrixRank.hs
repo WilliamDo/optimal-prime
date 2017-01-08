@@ -7,12 +7,12 @@ import Data.Matrix as M
 import Statistics.Sample
 
 data DistanceMatrix = DistanceMatrix
-                      {
-                        distanceMatrix :: Matrix Double,
-                        origins :: [String],
-                        destinations :: [String]
-                      }
-                      deriving (Show)
+  {
+    distanceMatrix :: Matrix Double,
+    origins :: [String],
+    destinations :: [String]
+  }
+  deriving (Show)
 
 rankDestinations :: DistanceMatrix -> [(String, Double)]
 rankDestinations m = L.zip (destinations m) (L.map stdDev $ columns (distanceMatrix m))

@@ -61,23 +61,23 @@ instance FromJSON Row where
 
 process :: [String] -> [String] -> IO ()
 process from to = do
-        let escapedUrl = requestUrl from to
-        httpResponse <- simpleHTTP (getRequest escapedUrl) >>= getResponseBody
-        let (Just x) = decode (C.pack httpResponse) :: Maybe GoogleMatrix
-        let m = DMR.rankDestinations $ convert x
-        putStrLn (show m)
-        return ()
+  let escapedUrl = requestUrl from to
+  httpResponse <- simpleHTTP (getRequest escapedUrl) >>= getResponseBody
+  let (Just x) = decode (C.pack httpResponse) :: Maybe GoogleMatrix
+  let m = DMR.rankDestinations $ convert x
+  putStrLn (show m)
+  return ()
 
 urlDistanceMatrix = "http://maps.googleapis.com/maps/api/distancematrix/json?"
 
 requestUrl :: [String] -> [String] -> String
 requestUrl origins destinations = escapedUrl
-    where
-        escapedUrl = escapeURIString isUnescapedInURI (urlDistanceMatrix ++ resultString)
-        resultString = intercalate "&" [originsString, destinationsString, sensorString]
-        sensorString = "sensor=false"
-        originsString = "origins=" ++ intercalate "|" origins
-        destinationsString = "destinations=" ++ intercalate "|" destinations
+  where
+    escapedUrl = escapeURIString isUnescapedInURI (urlDistanceMatrix ++ resultString)
+    resultString = intercalate "&" [originsString, destinationsString, sensorString]
+    sensorString = "sensor=false"
+    originsString = "origins=" ++ intercalate "|" origins
+    destinationsString = "destinations=" ++ intercalate "|" destinations
 
 rowDistances :: Row -> [Double]
 rowDistances (Row elements) = distanceVals
