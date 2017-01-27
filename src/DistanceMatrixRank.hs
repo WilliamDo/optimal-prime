@@ -21,13 +21,3 @@ columns :: Matrix a -> [Vector a]
 columns m = L.map (flip M.getCol m) [1..cols]
   where
     cols = M.ncols m
-
-testMatrix = DistanceMatrix {distanceMatrix = M.fromLists [[1, 2], [3, 100]], origins = ["A", "B"], destinations = ["C", "D"]}
-
-foo :: IO (Int)
-foo = do
-  number <- fmap toString getLine
-  return (number)
-
-toString :: String -> Int
-toString _ = 123
